@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LiveKit Agent Avatar Cockpit</title>
-    <script src="https://unpkg.com/livekit-client@1.15.7/dist/livekit-client.min.js"></script>
     <style>
       :root {
         --bg: #0d1117;
@@ -249,7 +248,44 @@
     </main>
 
     <script>
-      function initApp() {
+      async function loadLiveKit() {
+        if (window.LiveKit) {
+          return window.LiveKit;
+        }
+
+        const loadScript = (src) =>
+          new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.async = true;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error(`Failed to load script ${src}`));
+            document.head.appendChild(script);
+          });
+
+        const cdnSrc = 'https://unpkg.com/livekit-client@1.15.7/dist/livekit-client.min.js';
+        try {
+          await loadScript(cdnSrc);
+        } catch (cdnError) {
+          console.warn('Failed to load LiveKit from CDN, trying local fallback.', cdnError);
+        }
+
+        if (!window.LiveKit) {
+          try {
+            await loadScript('libs/livekit-client.umd.js');
+          } catch (localError) {
+            throw new Error('Unable to load LiveKit SDK from CDN or local fallback.');
+          }
+        }
+
+        if (!window.LiveKit) {
+          throw new Error('LiveKit SDK failed to initialize.');
+        }
+
+        return window.LiveKit;
+      }
+
+      function initApp(LiveKit) {
         const statusEl = document.getElementById('status');
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
@@ -262,6 +298,12 @@
         const avatarStage = document.getElementById('avatarStage');
         const avatarModel = document.getElementById('avatarModel');
 
+        const dataPacketKind = LiveKit.DataPacket_Kind ?? LiveKit.DataPacketKind;
+        const DEFAULT_RELIABLE_KIND = 0;
+        const reliableDataKind = dataPacketKind?.RELIABLE ?? DEFAULT_RELIABLE_KIND;
+        if (!dataPacketKind) {
+          console.warn(`LiveKit DataPacket kind enum missing; defaulting RELIABLE data kind to ${DEFAULT_RELIABLE_KIND}.`);
+        }
         let room = null;
 
         function addMessage(type, text) {
@@ -302,6 +344,14 @@
         }
 
         async function connect() {
+          const { Room, RoomEvent } = LiveKit;
+          if (!Room || !RoomEvent) {
+            const message = 'LiveKit SDK is not ready. Please refresh and try again.';
+            setStatus(`Error: ${message}`);
+            addMessage('system', message);
+            return;
+          }
+
           const roomName = document.getElementById('roomInput').value.trim() || 'avatar-room';
           const identity = document.getElementById('identityInput').value.trim() || 'user';
 
@@ -317,7 +367,6 @@
 
             const { token, url } = await response.json();
 
-            const { Room, RoomEvent, DataPacket_Kind } = window.LiveKit;
             room = new Room({ adaptiveStream: true });
 
             room.on(RoomEvent.TrackSubscribed, (track) => {
@@ -401,12 +450,13 @@
           }
         }
 
-        function sendMessage(kind) {
+        function sendMessage(kind = reliableDataKind) {
           const text = messageInput.value.trim();
           if (!text || !room) return;
 
           const payload = new TextEncoder().encode(text);
-          room.localParticipant.publishData(payload, kind);
+          const dataKind = typeof kind === 'number' ? kind : reliableDataKind;
+          room.localParticipant.publishData(payload, dataKind);
           addMessage('user', text);
           messageInput.value = '';
         }
@@ -431,13 +481,13 @@
 
         connectBtn.addEventListener('click', connect);
         disconnectBtn.addEventListener('click', () => disconnect(false));
-        sendBtn.addEventListener('click', () => sendMessage(window.LiveKit.DataPacket_Kind.RELIABLE));
+        sendBtn.addEventListener('click', () => sendMessage(reliableDataKind));
         avatarModel.addEventListener('change', toggleAvatarPreview);
         document.getElementById('toggleAvatarBtn').addEventListener('click', toggleAvatarPreview);
         messageInput.addEventListener('keydown', (event) => {
           if (event.key === 'Enter') {
             event.preventDefault();
-            sendMessage(window.LiveKit.DataPacket_Kind.RELIABLE);
+            sendMessage(reliableDataKind);
           }
         });
 
@@ -446,26 +496,17 @@
         window.addEventListener('beforeunload', () => disconnect(true));
       }
 
-      // Check if LiveKit is loaded before initializing the app
-      if (window.LiveKit) {
-        initApp();
-      } else {
-        // If LiveKit isn't loaded yet, wait for it with a timeout
-        let attempts = 0;
-        const maxAttempts = 50; // 5 seconds with 100ms intervals
-        const checkLiveKit = () => {
-          if (window.LiveKit) {
-            initApp();
-          } else if (attempts < maxAttempts) {
-            attempts++;
-            setTimeout(checkLiveKit, 100);
-          } else {
-            console.error('LiveKit library failed to load within timeout period');
-            document.getElementById('status').textContent = 'Error: LiveKit library failed to load';
+      loadLiveKit()
+        .then((LiveKit) => {
+          initApp(LiveKit);
+        })
+        .catch((error) => {
+          console.error('LiveKit library failed to load', error);
+          const status = document.getElementById('status');
+          if (status) {
+            status.textContent = `Error: ${error.message}`;
           }
-        };
-        checkLiveKit();
-      }
+        });
     </script>
   </body>
 </html>
