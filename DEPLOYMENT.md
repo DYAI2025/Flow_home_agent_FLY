@@ -41,7 +41,7 @@ This document outlines how to deploy the LiveKit Avatar Cockpit frontend to Fly.
    fly deploy
    ```
 
-   The provided Dockerfile only builds the Node.js frontend, avoiding previous references to missing directories that caused `flyctl launch sessions finalize` to fail.
+   The provided Dockerfile only builds the Node.js frontend, avoiding previous references to missing directories that caused `flyctl launch sessions finalize` to fail. The `fly.toml` explicitly points to this Dockerfile so Fly does not try to use older multi-service build instructions.
 
 5. **Verify**
 
