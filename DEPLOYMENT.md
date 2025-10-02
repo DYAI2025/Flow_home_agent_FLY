@@ -1,108 +1,63 @@
-# Voice AI Agent - Deployment Guide
+# Deployment Guide
 
-This package allows you to deploy the Voice AI Agent with all features to cloud platforms like fly.io or Render.
+This document outlines how to deploy the LiveKit Avatar Cockpit frontend to Fly.io. The application is a single Node.js service that serves static assets and exposes a `/token` endpoint for LiveKit authentication.
 
-## Architecture Overview
+## Prerequisites
 
-The system consists of:
-1. LiveKit Server for real-time communication
-2. Node.js frontend for avatar cockpit interface
-3. Python agent with all AI features
-4. MongoDB for data persistence (external service)
+- A Fly.io account and the `flyctl` CLI installed.
+- LiveKit credentials (URL, API key and API secret).
+- Docker installed locally if you wish to build/run the container before deploying.
 
-## Deployment Options
+## Fly.io Deployment
 
-### Option 1: Deploy to Fly.io
+1. **Authenticate with Fly.io**
 
-#### Prerequisites:
-- Fly.io account
-- Fly CLI installed (`flyctl`)
-
-#### Steps:
-1. Initialize the app:
    ```bash
-   fly launch
+   fly auth login
    ```
 
-2. Set environment variables:
+2. **Create or configure the application**
+
+   The repository already contains a `fly.toml` describing the service. Run the following command to create the application on Fly (skip if it already exists):
+
    ```bash
-   fly secrets set LIVEKIT_URL=your_livekit_url
-   fly secrets set LIVEKIT_API_KEY=your_livekit_api_key
-   fly secrets set LIVEKIT_API_SECRET=your_livekit_api_secret
-   fly secrets set OPENAI_API_KEY=your_openai_api_key
-   fly secrets set MONGODB_URI=your_mongodb_connection_string
+   fly launch --no-deploy
    ```
 
-3. Deploy:
+   If `flyctl` asks about creating a new app, choose a unique name or edit `fly.toml` before running the command.
+
+3. **Set secrets**
+
+   ```bash
+   fly secrets set \
+     LIVEKIT_URL=wss://your-livekit-host \
+     LIVEKIT_API_KEY=lk_api_key \
+     LIVEKIT_API_SECRET=lk_api_secret
+   ```
+
+4. **Deploy**
+
    ```bash
    fly deploy
    ```
 
-### Option 2: Deploy to Render
+   The provided Dockerfile only builds the Node.js frontend, avoiding previous references to missing directories that caused `flyctl launch sessions finalize` to fail.
 
-#### Prerequisites:
-- Render account
+5. **Verify**
 
-#### Steps:
-1. Create a new Web Service on Render
-2. Connect to your GitHub/GitLab repository
-3. Use the Dockerfile for building
-4. Set environment variables in the Render dashboard:
-   - LIVEKIT_URL (your LiveKit server URL)
-   - LIVEKIT_API_KEY
-   - LIVEKIT_API_SECRET
-   - OPENAI_API_KEY
-   - MONGODB_URI
-   - PORT (set to 3000)
+   ```bash
+   fly status
+   fly logs
+   ```
 
-## Important Notes
-
-1. **LiveKit Server**: For production, you'll need a separate LiveKit server instance (can be self-hosted or use LiveKit Cloud)
-
-2. **Database**: MongoDB connection needs to be configured separately
-
-3. **API Keys**: All required API keys need to be set as environment variables
-
-4. **Scaling**: Consider the resource requirements for audio processing
-
-## Environment Variables
-
-Required:
-- `LIVEKIT_URL` - WebSocket URL for LiveKit server
-- `LIVEKIT_API_KEY` - LiveKit API key
-- `LIVEKIT_API_SECRET` - LiveKit API secret
-- `OPENAI_API_KEY` - OpenAI API key for LLM functionality
-- `MONGODB_URI` - MongoDB connection string
-
-Optional:
-- `PORT` - Port to run the server on (default: 3000)
-
-## Features Included
-
-All 12 requested features are included:
-1. Avatar integration with Ready Player Me
-2. MongoDB database
-3. Semantic memory
-4. Episodic memory 
-5. Screen observation
-6. Natural language processing
-7. Task management
-8. Scheduling
-9. Personalized recommendations
-10. Voice commands
-11. Translation
-12. Feedback mechanism
-
-## Customization
-
-You can customize the deployment by modifying:
-- `Dockerfile` - Build and runtime configuration
-- `fly.toml` - Fly.io specific settings
-- `render.yaml` - Render specific settings
+   You can also hit `https://<app-name>.fly.dev/healthz` to check the health endpoint.
 
 ## Troubleshooting
 
-If facing issues:
-1. Check all environment variables are set correctly
-2. Verify network connectivity between components
-3. Check logs in the platform dashboard for errors
+- **`Error: Not Found` during `fly launch`** – earlier versions of the project referenced directories that were not part of the repository. The simplified Dockerfile in the current version avoids these missing paths so the build can succeed.
+- **Token endpoint returning errors** – ensure all three LiveKit environment variables are set through Fly secrets or the container environment.
+- **Static assets not loading** – the server serves `index.html` from the project root. Ensure that the deployment bundle includes this file (it does by default when using `fly deploy`).
+
+## Render Deployment
+
+Render can run the same Docker image. Create a new Web Service in the Render dashboard and point it to this repository. Use `npm start` as the start command and configure the same LiveKit environment variables.
