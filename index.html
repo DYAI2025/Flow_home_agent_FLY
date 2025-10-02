@@ -299,9 +299,10 @@
         const avatarModel = document.getElementById('avatarModel');
 
         const dataPacketKind = LiveKit.DataPacket_Kind ?? LiveKit.DataPacketKind;
-        const reliableDataKind = dataPacketKind?.RELIABLE ?? 0;
+        const DEFAULT_RELIABLE_KIND = 0;
+        const reliableDataKind = dataPacketKind?.RELIABLE ?? DEFAULT_RELIABLE_KIND;
         if (!dataPacketKind) {
-          console.warn('LiveKit DataPacket kind enum missing; defaulting RELIABLE data kind to 0.');
+          console.warn(`LiveKit DataPacket kind enum missing; defaulting RELIABLE data kind to ${DEFAULT_RELIABLE_KIND}.`);
         }
         let room = null;
 
