@@ -24,9 +24,9 @@ async def test_connection(url: Optional[str] = None) -> bool:
 
     # The REST API expects HTTP(S) URLs, convert ws:// prefixes automatically.
     if api_url.startswith("ws://"):
-        api_url = "http://" + api_url[len("ws://") :]
+        api_url = api_url.replace("ws://", "http://", 1)
     elif api_url.startswith("wss://"):
-        api_url = "https://" + api_url[len("wss://") :]
+        api_url = api_url.replace("wss://", "https://", 1)
 
     print(f"Testing connection to LiveKit server at: {api_url}")
 
