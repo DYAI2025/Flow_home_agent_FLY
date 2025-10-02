@@ -1,2 +1,56 @@
 #!/usr/bin/env python3
-\"\"\"\nTest script to verify the agent can connect to the local LiveKit server\n\"\"\"\n\nimport os\nfrom livekit import api\n\nasync def test_connection():\n    \"\"\"Test connection to the local LiveKit server\"\"\"\n    # Use the same environment variables as our agent\n    url = os.environ.get(\"LIVEKIT_URL\", \"http://localhost:7880\")  # Use HTTP for API, not WS\n    api_key = os.environ.get(\"LIVEKIT_API_KEY\", \"devkey\")\n    api_secret = os.environ.get(\"LIVEKIT_API_SECRET\", \"secret\")\n    \n    print(f\"Testing connection to LiveKit server at: {url}\")\n    \n    try:\n        # Create API client (use HTTP URL for API calls, not WebSocket)\n        client = api.LiveKitAPI(\n            url=url,\n            api_key=api_key,\n            api_secret=api_secret\n        )\n        \n        # Test by listing rooms (should be empty initially)\n        rooms = await client.room.list_rooms()\n        print(f\"✓ Successfully connected to LiveKit server\")\n        print(f\"  - Number of rooms: {len(rooms)}\")\n        \n        # Close the client\n        await client.aclose()\n        print(\"✓ Connection test completed successfully\")\n        \n    except Exception as e:\n        print(f\"✗ Failed to connect to LiveKit server: {e}\")\n        return False\n    \n    return True\n\n\nif __name__ == \"__main__\":\n    import asyncio\n    # Set the same environment variables as our agents\n    os.environ.setdefault(\"LIVEKIT_URL\", \"http://localhost:7880\")  # Use HTTP for API\n    os.environ.setdefault(\"LIVEKIT_API_KEY\", \"devkey\")\n    os.environ.setdefault(\"LIVEKIT_API_SECRET\", \"secret\")\n    \n    success = asyncio.run(test_connection())\n    if success:\n        print(\"\\nYou can now run your agent with:\")\n        print(\"  cd /home/dyai/Dokumente/DYAI_home/DEV/AI_LLM/Livekit_Agents/agents\")\n        print(\"  uv run python ../server/voice_agent.py dev\")\n    else:\n        print(\"\\nPlease start the LiveKit server first:\")\n        print(\"  cd /home/dyai/Dokumente/DYAI_home/DEV/AI_LLM/Livekit_Agents/server\")\n        print(\"  ./start_server_docker.sh\")\n
+"""Test script to verify the agent can connect to the local LiveKit server."""
+
+import asyncio
+import os
+from typing import Optional
+
+from livekit import api
+
+
+async def test_connection(url: Optional[str] = None) -> bool:
+    """Test connection to the local LiveKit server.
+
+    Args:
+        url: Optional override for the LiveKit API URL.
+
+    Returns:
+        ``True`` if the server responded to an API call, otherwise ``False``.
+    """
+
+    api_url = url or os.environ.get("LIVEKIT_URL", "http://localhost:7880")
+    api_key = os.environ.get("LIVEKIT_API_KEY", "devkey")
+    api_secret = os.environ.get("LIVEKIT_API_SECRET", "secret")
+
+    # The REST API expects HTTP(S) URLs, convert ws:// prefixes automatically.
+    if api_url.startswith("ws://"):
+        api_url = api_url.replace("ws://", "http://", 1)
+    elif api_url.startswith("wss://"):
+        api_url = api_url.replace("wss://", "https://", 1)
+
+    print(f"Testing connection to LiveKit server at: {api_url}")
+
+    try:
+        async with api.LiveKitAPI(url=api_url, api_key=api_key, api_secret=api_secret) as client:
+            rooms = await client.room.list_rooms()
+        print("✓ Successfully connected to LiveKit server")
+        print(f"  - Number of rooms: {len(rooms)}")
+    except Exception as exc:  # pragma: no cover - diagnostic utility
+        print(f"✗ Failed to connect to LiveKit server: {exc}")
+        return False
+
+    return True
+
+
+if __name__ == "__main__":
+    os.environ.setdefault("LIVEKIT_URL", "http://localhost:7880")
+    os.environ.setdefault("LIVEKIT_API_KEY", "devkey")
+    os.environ.setdefault("LIVEKIT_API_SECRET", "secret")
+
+    success = asyncio.run(test_connection())
+    if success:
+        print("\nYou can now run your agent with:")
+        print("  python main.py")
+    else:
+        print("\nPlease start the LiveKit server first:")
+        print("  cd server && ./start_server_docker.sh")

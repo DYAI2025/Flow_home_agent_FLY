@@ -1,16 +1,18 @@
 #!/bin/bash
 
 # Stop script for the Voice AI Agent system
-# This script stops all components of the system
+# Stops the Node.js frontend, Python agent, and LiveKit container if running.
+
+set -euo pipefail
 
 echo "Stopping Voice AI Agent system..."
 
-# Kill the frontend and agent processes
 pkill -f "node.*server.js" 2>/dev/null || true
-pkill -f "python.*main.py" 2>/dev/null || true
+pkill -f "python3 .*main.py" 2>/dev/null || true
 
-# Optionally stop the LiveKit Docker container
-echo "Stopping LiveKit server container..."
-docker stop livekit-server-dev 2>/dev/null || true
+if docker ps -a --format '{{.Names}}' | grep -q '^livekit-server-dev$'; then
+    echo "Stopping LiveKit server container..."
+    docker stop livekit-server-dev 2>/dev/null || true
+fi
 
 echo "All components stopped successfully!"

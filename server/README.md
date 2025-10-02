@@ -41,15 +41,15 @@ To run the example agents:
 2. From the agents directory, run:
 
 ```bash
-cd ../agents/
-uv run python ../voice_ai_agent/main.py dev
+cd ..
+python main.py
 ```
 
 For the voice agent, you'll also need to set the required API keys:
 
 ```bash
 export OPENAI_API_KEY=your_openai_api_key_here
-uv run python ../voice_ai_agent/main.py dev
+python main.py
 ```
 
 ## Testing Connection
@@ -57,8 +57,8 @@ uv run python ../voice_ai_agent/main.py dev
 You can test if the server is running correctly:
 
 ```bash
-cd ../agents/
-uv run python ../server/test_connection.py
+cd ..
+python server/test_connection.py
 ```
 
 ## Configuration
