@@ -249,154 +249,156 @@
     </main>
 
     <script>
-      const statusEl = document.getElementById('status');
-      const chatMessages = document.getElementById('chatMessages');
-      const messageInput = document.getElementById('messageInput');
-      const connectBtn = document.getElementById('connectBtn');
-      const disconnectBtn = document.getElementById('disconnectBtn');
-      const sendBtn = document.getElementById('sendBtn');
-      const remoteVideo = document.getElementById('remoteVideo');
-      const localVideo = document.getElementById('localVideo');
-      const videoPlaceholder = document.getElementById('videoPlaceholder');
-      const avatarStage = document.getElementById('avatarStage');
-      const avatarModel = document.getElementById('avatarModel');
+      window.addEventListener('DOMContentLoaded', () => {
+        const statusEl = document.getElementById('status');
+        const chatMessages = document.getElementById('chatMessages');
+        const messageInput = document.getElementById('messageInput');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const sendBtn = document.getElementById('sendBtn');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const localVideo = document.getElementById('localVideo');
+        const videoPlaceholder = document.getElementById('videoPlaceholder');
+        const avatarStage = document.getElementById('avatarStage');
+        const avatarModel = document.getElementById('avatarModel');
 
-      let room = null;
+        let room = null;
 
-      function addMessage(type, text) {
-        const wrapper = document.createElement('div');
-        wrapper.className = `message ${type}`;
-        const timestamp = new Date().toLocaleTimeString();
-        wrapper.textContent = `[${timestamp}] ${text}`;
-        chatMessages.appendChild(wrapper);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-      }
+        function addMessage(type, text) {
+          const wrapper = document.createElement('div');
+          wrapper.className = `message ${type}`;
+          const timestamp = new Date().toLocaleTimeString();
+          wrapper.textContent = `[${timestamp}] ${text}`;
+          chatMessages.appendChild(wrapper);
+          chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
 
-      function setStatus(text) {
-        statusEl.textContent = `Status: ${text}`;
-      }
+        function setStatus(text) {
+          statusEl.textContent = `Status: ${text}`;
+        }
 
-      async function connect() {
-        const roomName = document.getElementById('roomInput').value.trim() || 'avatar-room';
-        const identity = document.getElementById('identityInput').value.trim() || 'user';
+        async function connect() {
+          const roomName = document.getElementById('roomInput').value.trim() || 'avatar-room';
+          const identity = document.getElementById('identityInput').value.trim() || 'user';
 
-        setStatus(`Requesting access token for ${roomName}…`);
+          setStatus(`Requesting access token for ${roomName}…`);
 
-        try {
-          const response = await fetch(`/token?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
+          try {
+            const response = await fetch(`/token?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
 
-          if (!response.ok) {
-            const payload = await response.json().catch(() => ({}));
-            throw new Error(payload.error || 'Token request failed');
+            if (!response.ok) {
+              const payload = await response.json().catch(() => ({}));
+              throw new Error(payload.error || 'Token request failed');
+            }
+
+            const { token, url } = await response.json();
+
+            const { Room, RoomEvent, DataPacket_Kind } = window.LiveKit;
+            room = new Room();
+
+            room.on(RoomEvent.TrackSubscribed, (track) => {
+              if (track.kind === 'video') {
+                track.attach(remoteVideo);
+                remoteVideo.style.display = 'block';
+                videoPlaceholder.style.display = 'none';
+              }
+            });
+
+            room.on(RoomEvent.TrackUnsubscribed, (track) => {
+              if (track.kind === 'video') {
+                track.detach();
+                remoteVideo.style.display = 'none';
+                videoPlaceholder.style.display = 'flex';
+              }
+            });
+
+            room.on(RoomEvent.DataReceived, (payload, participant) => {
+              const text = new TextDecoder().decode(payload);
+              addMessage('agent', `${participant.identity}: ${text}`);
+            });
+
+            await room.connect(url, token);
+            setStatus(`Connected to ${roomName}`);
+            addMessage('system', `Connected as ${identity}`);
+
+            connectBtn.disabled = true;
+            disconnectBtn.disabled = false;
+            sendBtn.disabled = false;
+
+            const localTracks = room.localParticipant.getTrackPublications();
+            localTracks.forEach((publication) => {
+              if (publication.track && publication.track.kind === 'video') {
+                publication.track.attach(localVideo);
+                localVideo.style.display = 'block';
+              }
+            });
+
+            // Removed duplicate sendBtn.onclick assignment; rely on addEventListener outside connect.
+          } catch (error) {
+            console.error('Failed to connect', error);
+            setStatus(`Error: ${error.message}`);
+            addMessage('system', `Connection failed: ${error.message}`);
+            disconnect(true);
+          }
+        }
+
+        function disconnect(silent = false) {
+          if (room) {
+            room.disconnect();
+            room = null;
           }
 
-          const { token, url } = await response.json();
+          connectBtn.disabled = false;
+          disconnectBtn.disabled = true;
+          sendBtn.disabled = true;
+          remoteVideo.style.display = 'none';
+          localVideo.style.display = 'none';
+          videoPlaceholder.style.display = 'flex';
+          setStatus('Not connected');
 
-          const { Room, RoomEvent, DataPacket_Kind } = window.LiveKit;
-          room = new Room();
-
-          room.on(RoomEvent.TrackSubscribed, (track) => {
-            if (track.kind === 'video') {
-              track.attach(remoteVideo);
-              remoteVideo.style.display = 'block';
-              videoPlaceholder.style.display = 'none';
-            }
-          });
-
-          room.on(RoomEvent.TrackUnsubscribed, (track) => {
-            if (track.kind === 'video') {
-              track.detach();
-              remoteVideo.style.display = 'none';
-              videoPlaceholder.style.display = 'flex';
-            }
-          });
-
-          room.on(RoomEvent.DataReceived, (payload, participant) => {
-            const text = new TextDecoder().decode(payload);
-            addMessage('agent', `${participant.identity}: ${text}`);
-          });
-
-          await room.connect(url, token);
-          setStatus(`Connected to ${roomName}`);
-          addMessage('system', `Connected as ${identity}`);
-
-          connectBtn.disabled = true;
-          disconnectBtn.disabled = false;
-          sendBtn.disabled = false;
-
-          const localTracks = room.localParticipant.getTrackPublications();
-          localTracks.forEach((publication) => {
-            if (publication.track && publication.track.kind === 'video') {
-              publication.track.attach(localVideo);
-              localVideo.style.display = 'block';
-            }
-          });
-
-          // Removed duplicate sendBtn.onclick assignment; rely on addEventListener outside connect.
-        } catch (error) {
-          console.error('Failed to connect', error);
-          setStatus(`Error: ${error.message}`);
-          addMessage('system', `Connection failed: ${error.message}`);
-          disconnect(true);
-        }
-      }
-
-      function disconnect(silent = false) {
-        if (room) {
-          room.disconnect();
-          room = null;
+          if (!silent) {
+            addMessage('system', 'Disconnected');
+          }
         }
 
-        connectBtn.disabled = false;
-        disconnectBtn.disabled = true;
+        function sendMessage(kind) {
+          const text = messageInput.value.trim();
+          if (!text || !room) return;
+
+          const payload = new TextEncoder().encode(text);
+          room.localParticipant.publishData(payload, kind);
+          addMessage('user', text);
+          messageInput.value = '';
+        }
+
+        function toggleAvatarPreview() {
+          const url = avatarModel.value.trim();
+          if (!url) {
+            addMessage('system', 'Provide a Ready Player Me avatar URL to preview it.');
+            return;
+          }
+
+          avatarStage.style.backgroundImage = `url('https://readyplayer.me/render?model=${encodeURIComponent(url)}&scene=fullbody-portrait')`;
+          avatarStage.style.backgroundSize = 'cover';
+          avatarStage.style.backgroundPosition = 'center';
+          addMessage('system', 'Avatar preview updated.');
+        }
+
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', () => disconnect(false));
+        sendBtn.addEventListener('click', () => sendMessage(window.LiveKit.DataPacket_Kind.RELIABLE));
+        avatarModel.addEventListener('change', toggleAvatarPreview);
+        document.getElementById('toggleAvatarBtn').addEventListener('click', toggleAvatarPreview);
+        messageInput.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            sendMessage(window.LiveKit.DataPacket_Kind.RELIABLE);
+          }
+        });
+
+        addMessage('system', 'Welcome! Configure a room and press Connect to begin.');
         sendBtn.disabled = true;
-        remoteVideo.style.display = 'none';
-        localVideo.style.display = 'none';
-        videoPlaceholder.style.display = 'flex';
-        setStatus('Not connected');
-
-        if (!silent) {
-          addMessage('system', 'Disconnected');
-        }
-      }
-
-      function sendMessage(kind) {
-        const text = messageInput.value.trim();
-        if (!text || !room) return;
-
-        const payload = new TextEncoder().encode(text);
-        room.localParticipant.publishData(payload, kind);
-        addMessage('user', text);
-        messageInput.value = '';
-      }
-
-      function toggleAvatarPreview() {
-        const url = avatarModel.value.trim();
-        if (!url) {
-          addMessage('system', 'Provide a Ready Player Me avatar URL to preview it.');
-          return;
-        }
-
-        avatarStage.style.backgroundImage = `url('https://readyplayer.me/render?model=${encodeURIComponent(url)}&scene=fullbody-portrait')`;
-        avatarStage.style.backgroundSize = 'cover';
-        avatarStage.style.backgroundPosition = 'center';
-        addMessage('system', 'Avatar preview updated.');
-      }
-
-      connectBtn.addEventListener('click', connect);
-      disconnectBtn.addEventListener('click', () => disconnect(false));
-      sendBtn.addEventListener('click', () => sendMessage(window.LiveKit.DataPacket_Kind.RELIABLE));
-      avatarModel.addEventListener('change', toggleAvatarPreview);
-      document.getElementById('toggleAvatarBtn').addEventListener('click', toggleAvatarPreview);
-      messageInput.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault();
-          sendMessage(window.LiveKit.DataPacket_Kind.RELIABLE);
-        }
       });
-
-      addMessage('system', 'Welcome! Configure a room and press Connect to begin.');
-      sendBtn.disabled = true;
     </script>
   </body>
 </html>
