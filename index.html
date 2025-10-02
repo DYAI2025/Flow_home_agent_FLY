@@ -277,6 +277,30 @@
           statusEl.textContent = `Status: ${text}`;
         }
 
+        function validateReadyPlayerUrl(url) {
+          try {
+            const parsed = new URL(url);
+            if (!['http:', 'https:'].includes(parsed.protocol)) {
+              return false;
+            }
+            return parsed.hostname.endsWith('readyplayer.me');
+          } catch (error) {
+            return false;
+          }
+        }
+
+        function detachLocalTracks() {
+          if (!room) return;
+          room.localParticipant
+            .getTrackPublications()
+            .forEach((publication) => {
+              if (publication.track) {
+                publication.track.detach();
+                publication.track.stop();
+              }
+            });
+        }
+
         async function connect() {
           const roomName = document.getElementById('roomInput').value.trim() || 'avatar-room';
           const identity = document.getElementById('identityInput').value.trim() || 'user';
@@ -294,7 +318,7 @@
             const { token, url } = await response.json();
 
             const { Room, RoomEvent, DataPacket_Kind } = window.LiveKit;
-            room = new Room();
+            room = new Room({ adaptiveStream: true });
 
             room.on(RoomEvent.TrackSubscribed, (track) => {
               if (track.kind === 'video') {
@@ -317,6 +341,11 @@
               addMessage('agent', `${participant.identity}: ${text}`);
             });
 
+            room.on(RoomEvent.Disconnected, () => {
+              detachLocalTracks();
+              disconnect(true);
+            });
+
             await room.connect(url, token);
             setStatus(`Connected to ${roomName}`);
             addMessage('system', `Connected as ${identity}`);
@@ -325,13 +354,23 @@
             disconnectBtn.disabled = false;
             sendBtn.disabled = false;
 
-            const localTracks = room.localParticipant.getTrackPublications();
-            localTracks.forEach((publication) => {
-              if (publication.track && publication.track.kind === 'video') {
-                publication.track.attach(localVideo);
-                localVideo.style.display = 'block';
+            try {
+              const publications = await room.localParticipant.enableCameraAndMicrophone();
+              let publishedVideo = false;
+              publications.forEach((publication) => {
+                if (publication.track && publication.track.kind === 'video') {
+                  publication.track.attach(localVideo);
+                  localVideo.style.display = 'block';
+                  publishedVideo = true;
+                }
+              });
+              if (!publishedVideo) {
+                addMessage('system', 'Connected without publishing a local video track.');
               }
-            });
+            } catch (mediaError) {
+              console.warn('Unable to enable local media', mediaError);
+              addMessage('system', 'Connected but could not access camera or microphone.');
+            }
 
             // Removed duplicate sendBtn.onclick assignment; rely on addEventListener outside connect.
           } catch (error) {
@@ -344,6 +383,7 @@
 
         function disconnect(silent = false) {
           if (room) {
+            detachLocalTracks();
             room.disconnect();
             room = null;
           }
@@ -378,6 +418,11 @@
             return;
           }
 
+          if (!validateReadyPlayerUrl(url)) {
+            addMessage('system', 'The avatar URL must point to readyplayer.me.');
+            return;
+          }
+
           avatarStage.style.backgroundImage = `url('https://readyplayer.me/render?model=${encodeURIComponent(url)}&scene=fullbody-portrait')`;
           avatarStage.style.backgroundSize = 'cover';
           avatarStage.style.backgroundPosition = 'center';
@@ -398,6 +443,8 @@
 
         addMessage('system', 'Welcome! Configure a room and press Connect to begin.');
         sendBtn.disabled = true;
+        window.addEventListener('beforeunload', () => disconnect(true));
+
       });
     </script>
   </body>

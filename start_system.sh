@@ -1,64 +1,55 @@
 #!/bin/bash
 
 # Startup script for the complete Voice AI Agent with Avatar Cockpit
-# This script starts both the Node.js frontend and the Python agent
+# Starts the Node.js frontend and the Python LiveKit agent from this repository.
 
-set -e
+set -euo pipefail
 
-echo "Starting Voice AI Agent with Avatar Cockpit..."
-echo
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FRONTEND_DIR="$ROOT_DIR"
+SERVER_DIR="$ROOT_DIR/server"
+PYTHON_AGENT="main.py"
 
-# Function to start the Node.js server
 start_frontend() {
     echo "Starting Node.js frontend server..."
-    cd /home/dyai/Dokumente/DYAI_home/DEV/AI_LLM/Livekit_Agents/voice_ai_agent
-    npm start &
+    (cd "$FRONTEND_DIR" && npm install >/dev/null 2>&1 || true)
+    (cd "$FRONTEND_DIR" && npm start &)
     FRONTEND_PID=$!
     echo "Frontend server started with PID $FRONTEND_PID"
 }
 
-# Function to start the Python agent
 start_agent() {
     echo "Starting Python agent..."
-    cd /home/dyai/Dokumente/DYAI_home/DEV/AI_LLM/Livekit_Agents/agents
-    uv run python ../voice_ai_agent/main.py dev &
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "Python 3 is required but was not found." >&2
+        exit 1
+    fi
+    (cd "$ROOT_DIR" && python3 "$PYTHON_AGENT" &)
     AGENT_PID=$!
     echo "Python agent started with PID $AGENT_PID"
 }
 
-# Function to start the LiveKit server
 start_livekit() {
     echo "Starting LiveKit server..."
-    cd /home/dyai/Dokumente/DYAI_home/DEV/AI_LLM/Livekit_Agents/server
-    ./start_server_docker.sh
+    (cd "$SERVER_DIR" && ./start_server_docker.sh)
     echo "LiveKit server started"
 }
 
-# Check if we need to start the LiveKit server
-if [ "$1" = "with-server" ]; then
-    echo "Starting LiveKit server first..."
+if [[ "${1:-}" == "with-server" ]]; then
     start_livekit
-    sleep 10  # Wait for the server to start
+    sleep 10
 fi
 
-# Start the frontend
 start_frontend
-
-# Wait a moment to ensure frontend is ready
 sleep 3
-
-# Start the Python agent
 start_agent
 
 echo
 echo "All components started successfully!"
-echo
 echo "1. LiveKit server (if started): ws://localhost:7880"
 echo "2. Avatar cockpit: http://localhost:3000"
 echo "3. Python agent: Connected to LiveKit server"
-echo
-echo "To stop all components, run: pkill -f 'node server.js\|python.*main.py'"
-echo
 
-# Wait for both processes
+echo "Use stop_system.sh to stop all components."
+
 wait $FRONTEND_PID $AGENT_PID

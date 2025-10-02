@@ -7,6 +7,28 @@ const { AccessToken } = require('livekit-server-sdk');
 const app = express();
 const server = http.createServer(app);
 
+function normalizeLivekitUrl(rawUrl) {
+  if (!rawUrl) {
+    return 'ws://localhost:7880';
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    if (parsed.protocol === 'http:') {
+      parsed.protocol = 'ws:';
+    } else if (parsed.protocol === 'https:') {
+      parsed.protocol = 'wss:';
+    }
+    if (!parsed.protocol.startsWith('ws')) {
+      throw new Error(`Unsupported LiveKit protocol: ${parsed.protocol}`);
+    }
+    return parsed.toString();
+  } catch (error) {
+    console.warn('Invalid LIVEKIT_URL provided, falling back to ws://localhost:7880', error.message);
+    return 'ws://localhost:7880';
+  }
+}
+
 // Serve static files from the current directory
 app.use(express.static(path.join(__dirname)));
 
@@ -32,7 +54,7 @@ app.get('/token', (req, res) => {
 
     res.json({
       token: at.toJwt(),
-      url: process.env.LIVEKIT_URL || 'ws://localhost:7880',
+      url: normalizeLivekitUrl(process.env.LIVEKIT_URL),
       room,
     });
   } catch (error) {
@@ -48,6 +70,7 @@ app.get('/healthz', (_req, res) => {
 const port = process.env.PORT || 3000;
 server.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);
+  console.log(`Using LiveKit URL: ${normalizeLivekitUrl(process.env.LIVEKIT_URL)}`);
 });
 
 module.exports = server;
