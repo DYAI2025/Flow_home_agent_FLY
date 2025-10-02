@@ -332,7 +332,7 @@
             }
           });
 
-          sendBtn.onclick = () => sendMessage(DataPacket_Kind.RELIABLE);
+          // Removed duplicate sendBtn.onclick assignment; rely on addEventListener outside connect.
         } catch (error) {
           console.error('Failed to connect', error);
           setStatus(`Error: ${error.message}`);
