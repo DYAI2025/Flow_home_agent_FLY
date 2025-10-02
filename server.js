@@ -2,7 +2,7 @@
 const express = require('express');
 const http = require('http');
 const path = require('path');
-const { AccessToken } = require('livekit-server-sdk');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const server = http.createServer(app);
@@ -29,37 +29,64 @@ function normalizeLivekitUrl(rawUrl) {
   }
 }
 
+const livekitUmdPath = require.resolve('livekit-client');
+const livekitDistDir = path.dirname(livekitUmdPath);
+
 // Serve static files from the current directory
 app.use(express.static(path.join(__dirname)));
+app.use('/vendor/livekit-client', express.static(livekitDistDir));
+
+function createAccessToken({ apiKey, apiSecret, identity, room, ttlSeconds = 6 * 60 * 60 }) {
+  if (!apiKey || !apiSecret) {
+    throw new Error('LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be configured');
+  }
+
+  if (!identity) {
+    throw new Error('Participant identity is required to join a room');
+  }
+
+  const grants = {
+    video: {
+      room,
+      roomJoin: true,
+      canPublish: true,
+      canSubscribe: true,
+    },
+  };
+
+  const jwtOptions = {
+    issuer: apiKey,
+    expiresIn: ttlSeconds,
+    notBefore: 0,
+    subject: identity,
+    jwtid: identity,
+  };
+
+  return jwt.sign(grants, apiSecret, jwtOptions);
+}
 
 // Endpoint to generate access tokens for clients
 app.get('/token', (req, res) => {
   const API_KEY = process.env.LIVEKIT_API_KEY;
   const API_SECRET = process.env.LIVEKIT_API_SECRET;
-  const room = req.query.room || 'default-room';
-  const participantIdentity = req.query.identity || `participant-${Date.now()}`;
+  const room = (req.query.room || 'default-room').trim();
+  const participantIdentity = (req.query.identity || `participant-${Date.now()}`).trim();
 
   console.log(`Token request received - Room: ${room}, Identity: ${participantIdentity}`);
 
-  if (!API_KEY || !API_SECRET) {
-    console.error('Missing LiveKit credentials - LIVEKIT_API_KEY or LIVEKIT_API_SECRET not set');
-    return res.status(500).send({
-      error: 'LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be configured',
-    });
-  }
-
   try {
-    const at = new AccessToken(API_KEY, API_SECRET, {
+    const token = createAccessToken({
+      apiKey: API_KEY,
+      apiSecret: API_SECRET,
       identity: participantIdentity,
+      room,
     });
-
-    at.addGrant({ room, roomJoin: true, canPublish: true, canSubscribe: true });
 
     const livekitUrl = normalizeLivekitUrl(process.env.LIVEKIT_URL);
     console.log(`Generated token for room: ${room}, URL: ${livekitUrl}`);
 
     res.json({
-      token: at.toJwt(),
+      token,
       url: livekitUrl,
       room,
     });
