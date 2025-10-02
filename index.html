@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LiveKit Agent Avatar Cockpit</title>
-    <script src="https://unpkg.com/livekit-client@1.15.7/dist/livekit-client.min.js" defer></script>
+    <script src="https://unpkg.com/livekit-client@1.15.7/dist/livekit-client.min.js"></script>
     <style>
       :root {
         --bg: #0d1117;
@@ -249,7 +249,7 @@
     </main>
 
     <script>
-      window.addEventListener('DOMContentLoaded', () => {
+      function initApp() {
         const statusEl = document.getElementById('status');
         const chatMessages = document.getElementById('chatMessages');
         const messageInput = document.getElementById('messageInput');
@@ -444,8 +444,28 @@
         addMessage('system', 'Welcome! Configure a room and press Connect to begin.');
         sendBtn.disabled = true;
         window.addEventListener('beforeunload', () => disconnect(true));
+      }
 
-      });
+      // Check if LiveKit is loaded before initializing the app
+      if (window.LiveKit) {
+        initApp();
+      } else {
+        // If LiveKit isn't loaded yet, wait for it with a timeout
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds with 100ms intervals
+        const checkLiveKit = () => {
+          if (window.LiveKit) {
+            initApp();
+          } else if (attempts < maxAttempts) {
+            attempts++;
+            setTimeout(checkLiveKit, 100);
+          } else {
+            console.error('LiveKit library failed to load within timeout period');
+            document.getElementById('status').textContent = 'Error: LiveKit library failed to load';
+          }
+        };
+        checkLiveKit();
+      }
     </script>
   </body>
 </html>

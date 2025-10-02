@@ -39,7 +39,10 @@ app.get('/token', (req, res) => {
   const room = req.query.room || 'default-room';
   const participantIdentity = req.query.identity || `participant-${Date.now()}`;
 
+  console.log(`Token request received - Room: ${room}, Identity: ${participantIdentity}`);
+
   if (!API_KEY || !API_SECRET) {
+    console.error('Missing LiveKit credentials - LIVEKIT_API_KEY or LIVEKIT_API_SECRET not set');
     return res.status(500).send({
       error: 'LIVEKIT_API_KEY and LIVEKIT_API_SECRET must be configured',
     });
@@ -52,14 +55,17 @@ app.get('/token', (req, res) => {
 
     at.addGrant({ room, roomJoin: true, canPublish: true, canSubscribe: true });
 
+    const livekitUrl = normalizeLivekitUrl(process.env.LIVEKIT_URL);
+    console.log(`Generated token for room: ${room}, URL: ${livekitUrl}`);
+
     res.json({
       token: at.toJwt(),
-      url: normalizeLivekitUrl(process.env.LIVEKIT_URL),
+      url: livekitUrl,
       room,
     });
   } catch (error) {
     console.error('Failed to create LiveKit access token', error);
-    res.status(500).send({ error: 'Failed to create access token' });
+    res.status(500).send({ error: 'Failed to create access token', details: error.message });
   }
 });
 
