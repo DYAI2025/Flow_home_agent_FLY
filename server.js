@@ -3,6 +3,11 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const { AccessToken } = require('livekit-server-sdk');
+const {
+  CartesiaConfigurationError,
+  fetchAvatarImage,
+  getPublicConfig,
+} = require('./cartesiaClient');
 
 const app = express();
 const server = http.createServer(app);
@@ -31,6 +36,26 @@ function normalizeLivekitUrl(rawUrl) {
 
 // Serve static files from the current directory
 app.use(express.static(path.join(__dirname)));
+
+app.get('/cartesia/config', (_req, res) => {
+  res.json(getPublicConfig());
+});
+
+app.get('/cartesia/avatar', async (_req, res) => {
+  try {
+    const { buffer, contentType } = await fetchAvatarImage();
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(buffer);
+  } catch (error) {
+    if (error instanceof CartesiaConfigurationError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    console.error('Failed to retrieve Cartesia avatar', error);
+    res.status(502).json({ error: 'Failed to retrieve Cartesia avatar' });
+  }
+});
 
 // Endpoint to generate access tokens for clients
 app.get('/token', (req, res) => {

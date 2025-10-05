@@ -129,6 +129,26 @@
         box-shadow: 0 8px 20px rgba(88, 166, 255, 0.25);
       }
 
+      .config-output {
+        display: flex;
+        align-items: center;
+        padding: 0.75rem 0.85rem;
+        border-radius: 10px;
+        border: 1px dashed var(--panel-border);
+        background: rgba(14, 19, 27, 0.75);
+        color: var(--muted);
+        font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+          'Liberation Mono', 'Courier New', monospace;
+        font-size: 0.85rem;
+        min-height: 2.6rem;
+        word-break: break-all;
+      }
+
+      .config-output.configured {
+        border-style: solid;
+        color: var(--accent);
+      }
+
       .status {
         padding: 0.75rem 1rem;
         border-radius: 10px;
@@ -227,11 +247,15 @@
           <div class="controls-row with-buttons">
             <button id="connectBtn">Connect</button>
             <button id="disconnectBtn" disabled>Disconnect</button>
-            <button id="toggleAvatarBtn">Load Avatar</button>
+            <button id="refreshAvatarBtn" disabled>Refresh Cartesia Avatar</button>
           </div>
           <div class="controls-row">
-            <label for="avatarModel">Avatar model (Ready Player Me URL)</label>
-            <input id="avatarModel" placeholder="https://models.readyplayer.me/..." />
+            <label>Cartesia voice ID</label>
+            <div class="config-output" id="cartesiaVoiceId">Loading…</div>
+          </div>
+          <div class="controls-row">
+            <label>Cartesia face ID</label>
+            <div class="config-output" id="cartesiaFaceId">Loading…</div>
           </div>
           <div class="status" id="status">Status: Not connected</div>
         </div>
@@ -296,7 +320,9 @@
         const localVideo = document.getElementById('localVideo');
         const videoPlaceholder = document.getElementById('videoPlaceholder');
         const avatarStage = document.getElementById('avatarStage');
-        const avatarModel = document.getElementById('avatarModel');
+        const refreshAvatarBtn = document.getElementById('refreshAvatarBtn');
+        const voiceIdDisplay = document.getElementById('cartesiaVoiceId');
+        const faceIdDisplay = document.getElementById('cartesiaFaceId');
 
         const dataPacketKind = LiveKit.DataPacket_Kind ?? LiveKit.DataPacketKind;
         const DEFAULT_RELIABLE_KIND = 0;
@@ -305,6 +331,8 @@
           console.warn(`LiveKit DataPacket kind enum missing; defaulting RELIABLE data kind to ${DEFAULT_RELIABLE_KIND}.`);
         }
         let room = null;
+        let cartesiaConfig = { voiceConfigured: false, faceConfigured: false };
+        let avatarObjectUrl = null;
 
         function addMessage(type, text) {
           const wrapper = document.createElement('div');
@@ -319,16 +347,38 @@
           statusEl.textContent = `Status: ${text}`;
         }
 
-        function validateReadyPlayerUrl(url) {
-          try {
-            const parsed = new URL(url);
-            if (!['http:', 'https:'].includes(parsed.protocol)) {
-              return false;
-            }
-            return parsed.hostname.endsWith('readyplayer.me');
-          } catch (error) {
-            return false;
+        function renderConfigValue(element, value, configured = Boolean(value)) {
+          if (!element) return;
+          if (value) {
+            element.textContent = value;
+            element.classList.toggle('configured', configured);
+          } else {
+            element.textContent = 'Not configured';
+            element.classList.remove('configured');
           }
+        }
+
+        function updateAvatarButtonState(forceDisable = false) {
+          if (!refreshAvatarBtn) return;
+          refreshAvatarBtn.disabled = forceDisable || !cartesiaConfig?.faceConfigured;
+        }
+
+        function clearAvatarImage() {
+          if (avatarObjectUrl) {
+            URL.revokeObjectURL(avatarObjectUrl);
+            avatarObjectUrl = null;
+          }
+          avatarStage.style.backgroundImage = 'none';
+          avatarStage.style.backgroundSize = '';
+          avatarStage.style.backgroundPosition = '';
+        }
+
+        function updatePlaceholderVisibility() {
+          if (remoteVideo.style.display !== 'none') {
+            videoPlaceholder.style.display = 'none';
+            return;
+          }
+          videoPlaceholder.style.display = avatarObjectUrl ? 'none' : 'flex';
         }
 
         function detachLocalTracks() {
@@ -341,6 +391,93 @@
                 publication.track.stop();
               }
             });
+        }
+
+        async function refreshCartesiaAvatar() {
+          if (!cartesiaConfig?.faceConfigured) {
+            addMessage('system', 'Cartesia face ID is not available. Check the server configuration.');
+            updateAvatarButtonState();
+            return;
+          }
+
+          if (!refreshAvatarBtn) return;
+
+          const previousLabel = refreshAvatarBtn.textContent;
+          refreshAvatarBtn.textContent = 'Refreshing…';
+          refreshAvatarBtn.disabled = true;
+
+          try {
+            const response = await fetch('/cartesia/avatar', { cache: 'no-store' });
+            if (!response.ok) {
+              let errorMessage = 'Failed to load Cartesia avatar.';
+              try {
+                const payload = await response.json();
+                if (payload?.error) {
+                  errorMessage = payload.error;
+                }
+              } catch (parseError) {
+                console.warn('Non-JSON Cartesia avatar response', parseError);
+              }
+              throw new Error(errorMessage);
+            }
+
+            const blob = await response.blob();
+            clearAvatarImage();
+            avatarObjectUrl = URL.createObjectURL(blob);
+            avatarStage.style.backgroundImage = `url('${avatarObjectUrl}')`;
+            avatarStage.style.backgroundSize = 'cover';
+            avatarStage.style.backgroundPosition = 'center';
+            updatePlaceholderVisibility();
+            addMessage('system', 'Cartesia avatar refreshed.');
+          } catch (error) {
+            console.error('Unable to refresh Cartesia avatar', error);
+            clearAvatarImage();
+            updatePlaceholderVisibility();
+            addMessage('system', `Cartesia avatar error: ${error.message}`);
+          } finally {
+            refreshAvatarBtn.textContent = previousLabel;
+            updateAvatarButtonState();
+          }
+        }
+
+        async function loadCartesiaConfig() {
+          if (voiceIdDisplay) voiceIdDisplay.textContent = 'Loading…';
+          if (faceIdDisplay) faceIdDisplay.textContent = 'Loading…';
+
+          try {
+            const response = await fetch('/cartesia/config', { cache: 'no-store' });
+            if (!response.ok) {
+              throw new Error('Cartesia configuration unavailable');
+            }
+
+            const config = await response.json();
+            cartesiaConfig = config;
+            renderConfigValue(voiceIdDisplay, config.voiceId, config.voiceConfigured);
+            renderConfigValue(faceIdDisplay, config.faceId, config.faceConfigured);
+            updateAvatarButtonState();
+
+            if (config.faceConfigured) {
+              addMessage('system', 'Cartesia face configuration detected.');
+              await refreshCartesiaAvatar();
+            } else {
+              clearAvatarImage();
+              updatePlaceholderVisibility();
+              addMessage('system', 'Cartesia face ID is not configured.');
+            }
+
+            if (config.voiceConfigured) {
+              addMessage('system', 'Cartesia voice ID loaded.');
+            }
+          } catch (error) {
+            console.error('Unable to load Cartesia configuration', error);
+            cartesiaConfig = { voiceConfigured: false, faceConfigured: false };
+            renderConfigValue(voiceIdDisplay, null, false);
+            renderConfigValue(faceIdDisplay, null, false);
+            clearAvatarImage();
+            updatePlaceholderVisibility();
+            updateAvatarButtonState(true);
+            addMessage('system', 'Unable to load Cartesia configuration from the server.');
+          }
         }
 
         async function connect() {
@@ -373,7 +510,7 @@
               if (track.kind === 'video') {
                 track.attach(remoteVideo);
                 remoteVideo.style.display = 'block';
-                videoPlaceholder.style.display = 'none';
+                updatePlaceholderVisibility();
               }
             });
 
@@ -381,7 +518,7 @@
               if (track.kind === 'video') {
                 track.detach();
                 remoteVideo.style.display = 'none';
-                videoPlaceholder.style.display = 'flex';
+                updatePlaceholderVisibility();
               }
             });
 
@@ -442,7 +579,7 @@
           sendBtn.disabled = true;
           remoteVideo.style.display = 'none';
           localVideo.style.display = 'none';
-          videoPlaceholder.style.display = 'flex';
+          updatePlaceholderVisibility();
           setStatus('Not connected');
 
           if (!silent) {
@@ -461,29 +598,14 @@
           messageInput.value = '';
         }
 
-        function toggleAvatarPreview() {
-          const url = avatarModel.value.trim();
-          if (!url) {
-            addMessage('system', 'Provide a Ready Player Me avatar URL to preview it.');
-            return;
-          }
-
-          if (!validateReadyPlayerUrl(url)) {
-            addMessage('system', 'The avatar URL must point to readyplayer.me.');
-            return;
-          }
-
-          avatarStage.style.backgroundImage = `url('https://readyplayer.me/render?model=${encodeURIComponent(url)}&scene=fullbody-portrait')`;
-          avatarStage.style.backgroundSize = 'cover';
-          avatarStage.style.backgroundPosition = 'center';
-          addMessage('system', 'Avatar preview updated.');
-        }
-
         connectBtn.addEventListener('click', connect);
         disconnectBtn.addEventListener('click', () => disconnect(false));
         sendBtn.addEventListener('click', () => sendMessage(reliableDataKind));
-        avatarModel.addEventListener('change', toggleAvatarPreview);
-        document.getElementById('toggleAvatarBtn').addEventListener('click', toggleAvatarPreview);
+        if (refreshAvatarBtn) {
+          refreshAvatarBtn.addEventListener('click', () => {
+            refreshCartesiaAvatar();
+          });
+        }
         messageInput.addEventListener('keydown', (event) => {
           if (event.key === 'Enter') {
             event.preventDefault();
@@ -492,7 +614,9 @@
         });
 
         addMessage('system', 'Welcome! Configure a room and press Connect to begin.');
+        addMessage('system', 'Fetching Cartesia configuration from the server…');
         sendBtn.disabled = true;
+        loadCartesiaConfig();
         window.addEventListener('beforeunload', () => disconnect(true));
       }
 
