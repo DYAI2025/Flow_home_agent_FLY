@@ -1,6 +1,10 @@
 const DEFAULT_API_URL = 'https://api.cartesia.ai/v1';
 const DEFAULT_FACE_RENDER_PATH = '/faces/{faceId}/render';
-const fetchApi = globalThis.fetch;
+let fetchApi = globalThis.fetch;
+if (typeof fetchApi !== 'function') {
+  // Use node-fetch as a fallback in Node.js environments
+  fetchApi = require('node-fetch');
+}
 
 class CartesiaConfigurationError extends Error {
   constructor(message, statusCode = 500) {
