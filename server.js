@@ -34,8 +34,9 @@ function normalizeLivekitUrl(rawUrl) {
   }
 }
 
-const livekitUmdPath = require.resolve('livekit-client');
-const livekitDistDir = path.dirname(livekitUmdPath);
+// Resolve the path to the LiveKit client's dist directory containing the UMD bundle
+const livekitPackageJsonPath = require.resolve('livekit-client/package.json');
+const livekitDistDir = path.join(path.dirname(livekitPackageJsonPath), 'dist');
 
 // Serve static files from the current directory
 app.use(express.static(path.join(__dirname)));
