@@ -9,7 +9,7 @@ This is a comprehensive voice AI agent system that combines a Node.js/Express fr
 1. **Frontend (Node.js/Express)**: Serves the Avatar Cockpit UI and handles LiveKit token generation
 2. **Agent (Python)**: LiveKit-based voice agent using OpenAI, Silero, and Deepgram plugins
 3. **LiveKit Integration**: Real-time communication platform for voice/video streaming
-4. **Avatar Visualization**: Ready Player Me integration for avatar previews
+4. **Avatar Visualization**: Cartesia AI integration for avatar previews
 5. **Deployment**: Supports Fly.io and Render deployment with Docker
 
 ### Technologies Used
@@ -19,7 +19,7 @@ This is a comprehensive voice AI agent system that combines a Node.js/Express fr
 - **AI Services**: OpenAI (GPT models, STT, TTS), Deepgram (STT)
 - **Database**: MongoDB (via PyMongo/Motor)
 - **Real-time Communication**: LiveKit
-- **Avatar Service**: Ready Player Me
+- **Avatar Service**: Cartesia AI (face & voice identifiers)
 - **Deployment**: Docker, Fly.io, Render
 
 ## Architecture
@@ -114,6 +114,12 @@ The system consists of three main components working together:
 - `OPENAI_API_KEY`: OpenAI API key for agent functionality
 - `OPENAI_MODEL`: OpenAI model to use (default: gpt-4o-mini)
 - `PORT`: Port for the frontend server (default: 3000)
+- `CARTESIA_API_KEY`: Cartesia API key for avatar rendering (backend only)
+- `CARTESIA_FACE_ID`: Cartesia face identifier used for the cockpit preview
+- `CARTESIA_VOICE_ID`: Cartesia voice identifier presented in the UI
+- `CARTESIA_API_URL` *(optional)*: Override for the Cartesia API base URL (default `https://api.cartesia.ai/v1`)
+- `CARTESIA_FACE_RENDER_PATH` *(optional)*: Path template for Cartesia face renders (default `/faces/{faceId}/render`)
+- `CARTESIA_FACE_RENDER_URL` *(optional)*: Complete URL template (supports `{faceId}` placeholder) for avatar rendering
 
 ## Deployment
 
@@ -135,7 +141,10 @@ The system consists of three main components working together:
      LIVEKIT_URL=wss://your-livekit-host \
      LIVEKIT_API_KEY=lk_api_key \
      LIVEKIT_API_SECRET=lk_api_secret \
-     OPENAI_API_KEY=your_openai_key
+     OPENAI_API_KEY=your_openai_key \
+     CARTESIA_API_KEY=your_cartesia_key \
+     CARTESIA_FACE_ID=cartesia_face_id \
+     CARTESIA_VOICE_ID=cartesia_voice_id
    ```
 
 4. **Deploy**:
@@ -155,7 +164,7 @@ The project includes `render.yaml` for easy deployment to Render:
 ## Key Features
 
 1. **Voice AI Agent**: Real-time voice interaction with AI using STT/TTS
-2. **Avatar Visualization**: Preview Ready Player Me avatars
+2. **Avatar Visualization**: Preview Cartesia AI avatars
 3. **Real-time Communication**: LiveKit-based audio/video streaming
 4. **Data Messaging**: Text chat alongside voice communication
 5. **Responsive UI**: Clean, modern interface for agent interaction
